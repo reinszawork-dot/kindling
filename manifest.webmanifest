@@ -1,0 +1,14 @@
+{
+  "name": "Kindling — Habits",
+  "short_name": "Kindling",
+  "description": "A small, fast habit tracker. Keep the fire going.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf7f2",
+  "theme_color": "#f97316",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

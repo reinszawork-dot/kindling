@@ -420,6 +420,42 @@
   };
   const CHECK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
+  /* ---------- animation helpers ---------- */
+  const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let cuSeq = 0;
+  // Count a number up from 0 with an ease-out. Writing to the node again cancels it.
+  function countUp(node, to, { dur = 900, dec = 0, delay = 0, suffix = '' } = {}) {
+    const id = ++cuSeq;
+    node._cu = id;
+    const fmt = (v) => (dec ? v.toFixed(dec) : fmtNum(Math.round(v))) + suffix;
+    if (reduceMotion() || document.hidden) { node.textContent = fmt(to); return; }
+    node.textContent = fmt(0);
+    const t0 = performance.now() + delay;
+    const step = (now) => {
+      if (node._cu !== id) return;
+      const p = Math.min(1, Math.max(0, (now - t0) / dur));
+      node.textContent = fmt(to * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    // Safety net: if frames are paused (background tab, hidden window), still land on the real number.
+    setTimeout(() => { if (node._cu === id) node.textContent = fmt(to); }, delay + dur + 250);
+  }
+  const setText = (node, text) => { node._cu = null; node.textContent = text; };
+  // Props for a bar/track: when animating, start at 0 and grow to the final size after first paint (see grow()).
+  const sizeProps = (prop, val, anim, delayMs = 0) => (anim
+    ? { style: { [prop]: '0%' }, [prop === 'height' ? 'data-h' : 'data-w']: val, '--d': `${delayMs}ms` }
+    : { style: { [prop]: val } });
+  function grow(root) {
+    const apply = () => root.querySelectorAll('[data-h],[data-w]').forEach((e) => {
+      if (e.dataset.h) e.style.height = e.dataset.h;
+      if (e.dataset.w) e.style.width = e.dataset.w;
+    });
+    if (reduceMotion() || document.hidden) { apply(); return; }
+    requestAnimationFrame(() => requestAnimationFrame(apply));
+    setTimeout(apply, 150); // safety net if frames are paused; harmless if already applied
+  }
+
   let toastTimer;
   function toast(msg, actionLabel, action, ms) {
     const t = $('#toast');
@@ -431,21 +467,23 @@
   }
 
   /* ================= render: Today ================= */
-  function render() {
+  function render(opts = {}) {
+    const anim = !!opts.animate && !reduceMotion();
     $('#todayLabel').textContent = startOfToday().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
     applyTheme();
     const a = agg();
     $('#levelChip').textContent = `🔥 Lv ${a.level}`;
     $('#levelChip').title = `Level ${a.level} · ${levelTitle(a.level)} · ${fmtNum(a.xp)} XP`;
     $('#levelChip').hidden = !state.habits.length;
-    if (view === 'today') renderToday(); else renderStats();
+    if (view === 'today') renderToday(anim); else renderStats(anim);
   }
 
-  function renderWeek() {
+  function renderWeek(anim = false) {
     const today = startOfToday();
     const monday = addDays(mondayOf(today), weekOffset * 7);
     const wrap = $('#weekDays');
     wrap.replaceChildren();
+    wrap.classList.toggle('animate', anim);
     for (let i = 0; i < 7; i++) {
       const d = addDays(monday, i);
       const k = keyOf(d);
@@ -455,7 +493,7 @@
       if (k === todayKey()) cls.push('today');
       if (p.total && p.done === p.total) cls.push('full');
       wrap.append(el('button', {
-        class: cls.join(' '), disabled: d > today, '--p': Math.round(p.pct * 100),
+        class: cls.join(' '), disabled: d > today, '--p': Math.round(p.pct * 100), '--d': `${i * 45}ms`,
         'aria-label': `${fmtLong(d)}: ${p.done} of ${p.total} done`, 'aria-pressed': k === selectedKey,
         onclick: () => { selectedKey = k; renderToday(); },
       }, el('span', { class: 'dow' }, DOW[d.getDay()].slice(0, 2)), el('span', { class: 'num' }, el('span', {}, d.getDate())),
@@ -471,13 +509,29 @@
     return isDue(h, y) && dayStatus(h, y) === 'miss' && !isDone(h, keyOf(t)) && isDue(h, t) && !isSkipped(h, keyOf(t));
   }
 
-  function renderHero() {
+  function renderHero(anim = false) {
     const d = parseKey(selectedKey);
     const p = dayProgress(d);
     const isToday = selectedKey === todayKey();
     const when = isToday ? 'today' : `on ${fmtShort(d)}`;
-    $('#ringFill').style.strokeDashoffset = String(326.73 * (1 - p.pct));
-    $('#ringPct').textContent = `${Math.round(p.pct * 100)}%`;
+    const fill = $('#ringFill');
+    const target = String(326.73 * (1 - p.pct));
+    if (anim) {
+      // Reset to empty without a transition, then sweep around to the real value.
+      fill.style.transition = 'none';
+      fill.style.strokeDashoffset = '326.73';
+      fill.getBoundingClientRect();
+      fill.style.transition = '';
+      fill.classList.add('intro');
+      const sweep = () => { fill.style.strokeDashoffset = target; };
+      requestAnimationFrame(() => requestAnimationFrame(sweep));
+      setTimeout(sweep, 150);
+      setTimeout(() => fill.classList.remove('intro'), 1400);
+      countUp($('#ringPct'), Math.round(p.pct * 100), { suffix: '%', dur: 1100 });
+    } else {
+      fill.style.strokeDashoffset = target;
+      setText($('#ringPct'), `${Math.round(p.pct * 100)}%`);
+    }
     $('#ringCount').textContent = `${p.done} / ${p.total}`;
     let title, msg;
     if (!p.total) { title = 'Rest day'; msg = `Nothing scheduled ${when}. Enjoy it.`; }
@@ -576,7 +630,7 @@
     if (wkMet) cls.push('met');
     const missed = k === todayKey() && missedYesterday(h);
     const note = noteOf(h, k);
-    const li = el('li', { class: cls.join(' '), '--c': h.color, '--fill': fill, style: { animationDelay: `${idx * 30}ms` } });
+    const li = el('li', { class: cls.join(' '), '--c': h.color, '--fill': fill, '--d': `${idx * 45}ms` });
     li.append(el('button', { class: 'habit-main', onclick: () => openDetail(h.id), 'aria-label': `${h.name}: details, notes, skip` },
       el('span', { class: 'habit-emoji' }, h.emoji),
       el('span', { class: 'habit-info' },
@@ -592,8 +646,8 @@
     return li;
   }
 
-  function renderToday() {
-    renderWeek();
+  function renderToday(anim = false) {
+    renderWeek(anim);
     const habits = active();
     const hasAny = habits.length > 0;
     $('#emptyState').hidden = hasAny;
@@ -601,8 +655,9 @@
     $('.week').hidden = !hasAny;
     const wrap = $('#sections');
     wrap.replaceChildren();
+    wrap.classList.toggle('animate', anim);
     if (!hasAny) { renderStarters(); $('#nudge').hidden = true; return; }
-    renderHero();
+    renderHero(anim);
     const d = parseKey(selectedKey);
     const shown = habits.filter((h) => isDue(h, d));
     const useHeads = shown.some((h) => h.section !== 'anytime');
@@ -697,35 +752,45 @@
   const resetTitle = () => { if (!state.timer) document.title = 'Kindling — Habits'; };
 
   /* ================= render: Insights ================= */
-  function renderStats() {
+  function renderStats(anim = false) {
     const habits = active();
     const t = startOfToday();
     const a = agg();
     const ps = perfectStats();
+    $('#view-stats').classList.toggle('animate', anim);
 
     // Level
     const L = a.level, lo = levelFloor(L), hi = levelFloor(L + 1);
+    const lvB = el('b', {}, String(L));
+    const xpN = el('span', {}, fmtNum(a.xp));
     $('#levelCard').replaceChildren(
-      el('div', { class: 'level-badge' }, el('span', {}, '🔥'), el('b', {}, L)),
+      el('div', { class: 'level-badge' }, el('span', {}, '🔥'), lvB),
       el('div', { class: 'level-info' },
         el('div', { class: 'level-title' }, `Level ${L} · ${levelTitle(L)}`),
-        el('div', { class: 'xp-track' }, el('i', { style: { width: `${((a.xp - lo) / (hi - lo)) * 100}%` } })),
-        el('div', { class: 'muted' }, `${fmtNum(a.xp)} XP · ${fmtNum(hi - a.xp)} to ${levelTitle(L + 1)}`),
+        el('div', { class: 'xp-track' }, el('i', sizeProps('width', `${((a.xp - lo) / (hi - lo)) * 100}%`, anim, 250))),
+        el('div', { class: 'muted' }, xpN, ` XP · ${fmtNum(hi - a.xp)} to ${levelTitle(L + 1)}`),
         el('div', { class: 'xp-help' }, '+10 per check-in · +25 perfect day · +100 perfect week · +3 clean day, mood · +2 note')));
+    if (anim) { countUp(lvB, L, { dur: 700 }); countUp(xpN, a.xp, { dur: 1300, delay: 250 }); grow($('#levelCard')); }
 
     const rates = habits.map((h) => rate(h)).filter((r) => r != null);
     const avg = rates.length ? Math.round((rates.reduce((x, y) => x + y, 0) / rates.length) * 100) : 0;
     const moods30 = [];
     for (let i = 0; i < 30; i++) { const v = state.mood[keyOf(addDays(t, -i))]; if (v) moods30.push(v); }
     const avgMood = moods30.length ? moods30.reduce((x, y) => x + y, 0) / moods30.length : null;
-    const stat = (label, value, unit = '') => el('div', { class: 'stat' }, el('div', { class: 'label' }, label),
-      el('div', { class: 'value' }, String(value), unit ? el('small', {}, unit === '%' ? unit : ` ${unit}`) : null));
+    let si = 0;
+    const stat = (label, value, unit = '') => {
+      const delay = si++ * 70;
+      const v = el('span', {}, typeof value === 'number' ? fmtNum(value) : String(value));
+      if (anim && typeof value === 'number') countUp(v, value, { dur: 1000, delay: delay + 100 });
+      return el('div', { class: 'stat', '--d': `${delay}ms` }, el('div', { class: 'label' }, label),
+        el('div', { class: 'value' }, v, unit ? el('small', {}, unit === '%' ? unit : ` ${unit}`) : null));
+    };
     $('#statGrid').replaceChildren(
       stat('30-day completion', avg, '%'),
       stat('Perfect-day streak', ps.streak, ps.streak === 1 ? 'day' : 'days'),
       stat('Perfect weeks', ps.weeks),
       stat('Longest streak', a.bestStreak, a.bestStreak === 1 ? 'day' : 'days'),
-      stat('Total check-ins', fmtNum(a.checkins)),
+      stat('Total check-ins', a.checkins),
       stat('Average mood', avgMood ? MOODS[Math.round(avgMood) - 1].e : '—', avgMood ? avgMood.toFixed(1) : ''));
 
     // 30-day bars
@@ -740,21 +805,23 @@
       bars.append(el('div', {
         class: 'bar' + (p.total && p.done === p.total ? ' full' : '') + (!p.done ? ' none' : ''),
         'data-tip': `${fmtShort(d)} · ${p.done}/${p.total}${m ? ' · ' + MOODS[m - 1].e : ''}`,
-      }, el('i', { style: { height: `${Math.max(3, p.pct * 100)}%` } })));
+      }, el('i', sizeProps('height', `${Math.max(3, p.pct * 100)}%`, anim, 200 + (29 - i) * 22))));
     }
+    if (anim) grow(bars);
     $('#barsAxis').replaceChildren(el('span', {}, fmtShort(addDays(t, -29))), el('span', {}, 'Today'));
     $('#chartCaption').textContent = `${plural(perfect, 'perfect day')}`;
 
     // Year heatmap
     const year = $('#yearMap');
     year.replaceChildren();
+    year.classList.toggle('animate', anim);
     const ystart = addDays(mondayOf(t), -52 * 7);
     for (let i = 0; i < 53 * 7; i++) {
       const d = addDays(ystart, i);
       if (d > t) { year.append(el('i', { class: 'fut' })); continue; }
       const p = dayProgress(d);
       const lvl = !p.total ? 'na' : p.pct === 1 ? 'l4' : p.pct >= 0.67 ? 'l3' : p.pct >= 0.34 ? 'l2' : p.pct > 0 ? 'l1' : 'l0';
-      year.append(el('i', { class: lvl, title: `${fmtShort(d)}: ${p.total ? `${p.done}/${p.total}` : 'nothing scheduled'}` }));
+      year.append(el('i', { class: lvl, '--d': `${Math.floor(i / 7) * 9 + (i % 7) * 4}ms`, title: `${fmtShort(d)}: ${p.total ? `${p.done}/${p.total}` : 'nothing scheduled'}` }));
     }
     requestAnimationFrame(() => { const s = year.parentElement; s.scrollLeft = s.scrollWidth; });
 
@@ -767,30 +834,42 @@
     }
     const pcts = DOW_ORDER.map((dw) => ({ dw, p: sum[dw].total ? sum[dw].done / sum[dw].total : null }));
     const bestP = Math.max(...pcts.map((x) => x.p ?? -1));
-    $('#dowBars').replaceChildren(...pcts.map(({ dw, p }) => el('div', { class: 'dow-bar' + (p != null && p === bestP && p > 0 ? ' best' : '') },
-      el('span', { class: 'pct' }, p == null ? '—' : `${Math.round(p * 100)}%`),
-      el('span', { class: 'col' }, el('i', { style: { height: `${(p ?? 0) * 100}%` } })),
-      el('span', { class: 'lbl' }, DOW[dw].slice(0, 2)))));
+    $('#dowBars').replaceChildren(...pcts.map(({ dw, p }, j) => {
+      const pctEl = el('span', { class: 'pct' }, p == null ? '—' : `${Math.round(p * 100)}%`);
+      if (anim && p != null) countUp(pctEl, Math.round(p * 100), { suffix: '%', dur: 800, delay: 300 + j * 70 });
+      return el('div', { class: 'dow-bar' + (p != null && p === bestP && p > 0 ? ' best' : '') },
+        pctEl,
+        el('span', { class: 'col' }, el('i', sizeProps('height', `${(p ?? 0) * 100}%`, anim, 300 + j * 70))),
+        el('span', { class: 'lbl' }, DOW[dw].slice(0, 2)));
+    }));
+    if (anim) grow($('#dowBars'));
 
-    renderMoodInsight(t);
+    renderMoodInsight(t, anim);
 
     // Per habit
     const rl = $('#rateList');
     rl.replaceChildren(...(habits.length ? habits
       .map((h) => ({ h, r: rate(h), s: strength(h) }))
       .sort((x, y) => y.s - x.s)
-      .map(({ h, r, s }) => el('li', { class: 'rate', '--c': h.color },
-        el('span', { class: 'e' }, h.emoji),
-        el('span', { class: 'n' }, h.name, h.kind === 'quit' ? el('span', { class: 'tag' }, 'quit') : null),
-        el('span', { class: 'pct', title: 'Habit strength' }, `${s}%`),
-        el('span', { class: 'track', title: `Strength ${s}%` }, el('i', { style: { width: `${s}%` } })),
-        el('span', { class: 'sub' }, `${streakText(h)} · best ${streakInfo(h).best}${isWeekly(h) ? ' wks' : ''} · 30d ${r == null ? '—' : Math.round(r * 100) + '%'}`)))
+      .map(({ h, r, s }, j) => {
+        const delay = 250 + j * 80;
+        const pctEl = el('span', { class: 'pct', title: 'Habit strength' }, `${s}%`);
+        if (anim) countUp(pctEl, s, { suffix: '%', dur: 900, delay });
+        return el('li', { class: 'rate', '--c': h.color },
+          el('span', { class: 'e' }, h.emoji),
+          el('span', { class: 'n' }, h.name, h.kind === 'quit' ? el('span', { class: 'tag' }, 'quit') : null),
+          pctEl,
+          el('span', { class: 'track', title: `Strength ${s}%` }, el('i', sizeProps('width', `${s}%`, anim, delay))),
+          el('span', { class: 'sub' }, `${streakText(h)} · best ${streakInfo(h).best}${isWeekly(h) ? ' wks' : ''} · 30d ${r == null ? '—' : Math.round(r * 100) + '%'}`));
+      })
       : [el('li', { class: 'muted' }, 'Add a habit to see insights.')]));
+    if (anim) grow(rl);
 
     // Badges
     const earned = new Set(BADGES.filter((b) => b.test(a)).map((b) => b.id));
     $('#badgeCount').textContent = `${earned.size} of ${BADGES.length}`;
-    $('#badges').replaceChildren(...BADGES.map((b) => el('div', { class: 'badge' + (earned.has(b.id) ? ' got' : ''), title: b.desc },
+    $('#badges').classList.toggle('animate', anim);
+    $('#badges').replaceChildren(...BADGES.map((b, j) => el('div', { class: 'badge' + (earned.has(b.id) ? ' got' : ''), title: b.desc, '--d': `${j * 35}ms` },
       el('span', { class: 'be' }, b.e), el('b', {}, b.name), el('span', {}, b.desc))));
 
     const archived = state.habits.filter((h) => h.archived);
@@ -800,7 +879,7 @@
       el('button', { class: 'btn ghost', onclick: () => { h.archived = false; save(); render(); toast(`${h.name} restored`); } }, 'Restore'))));
   }
 
-  function renderMoodInsight(t) {
+  function renderMoodInsight(t, anim = false) {
     const box = $('#moodInsight');
     const days = [];
     for (let i = 0; i < 30; i++) {
@@ -812,10 +891,10 @@
       box.replaceChildren(el('p', { class: 'muted' }, "Tap a face on the Today screen to log how you feel. After a few days you'll see how your habits and mood connect."));
       return;
     }
-    const strip = el('div', { class: 'mood-strip' });
+    const strip = el('div', { class: 'mood-strip' + (anim ? ' animate' : '') });
     for (let i = 13; i >= 0; i--) {
       const v = state.mood[keyOf(addDays(t, -i))];
-      strip.append(el('span', { title: fmtShort(addDays(t, -i)) }, v ? MOODS[v - 1].e : '·'));
+      strip.append(el('span', { title: fmtShort(addDays(t, -i)), '--d': `${300 + (13 - i) * 40}ms` }, v ? MOODS[v - 1].e : '·'));
     }
     const hi = days.filter((x) => x.p.total && x.p.pct >= 0.8);
     const lo = days.filter((x) => !(x.p.total && x.p.pct >= 0.8));
@@ -1043,15 +1122,16 @@
 
   function openDetail(id, focusAmount = false) {
     detailId = id;
-    paintDetail();
+    paintDetail(true);
     detail.showModal();
     detail.querySelector('.sheet-body').scrollTop = 0;
     if (focusAmount) setTimeout(() => $('#dAmount')?.select(), 60);
   }
 
-  function paintDetail() {
+  function paintDetail(animate = false) {
     const h = byId(detailId);
     if (!h) return;
+    const anim = animate && !reduceMotion();
     const k = selectedKey;
     const d = parseKey(k);
     detail.style.setProperty('--c', h.color);
@@ -1101,17 +1181,24 @@
     const st = streakInfo(h);
     const r = rate(h);
     const unit = h.kind === 'quit' ? 'clean days' : isWeekly(h) ? 'weeks' : 'days';
+    let mi = 0;
+    const mini = (prefix, val, suffix, label, title) => {
+      const n = el('span', {}, val == null ? '—' : fmtNum(val));
+      if (anim && val != null) countUp(n, val, { dur: 800, delay: 120 + mi * 90 });
+      return el('div', { title: title || null, '--d': `${mi++ * 70}ms` }, el('b', {}, prefix, n, val == null ? '' : suffix), el('span', {}, label));
+    };
+    $('#dStats').classList.toggle('animate', anim);
     $('#dStats').replaceChildren(
-      el('div', {}, el('b', {}, `${h.kind === 'quit' ? '🛡' : '🔥'} ${st.cur}`), el('span', {}, `Current (${unit})`)),
-      el('div', {}, el('b', {}, String(st.best)), el('span', {}, 'Best streak')),
-      el('div', { title: 'Strength rises with each check-in and dips gently on misses; one bad day never resets it.' },
-        el('b', {}, `${strength(h)}%`), el('span', {}, 'Habit strength')),
-      el('div', {}, el('b', {}, r == null ? '—' : `${Math.round(r * 100)}%`), el('span', {}, '30-day rate')));
+      mini(h.kind === 'quit' ? '🛡 ' : '🔥 ', st.cur, '', `Current (${unit})`),
+      mini('', st.best, '', 'Best streak'),
+      mini('', strength(h), '%', 'Habit strength', 'Strength rises with each check-in and dips gently on misses; one bad day never resets it.'),
+      mini('', r == null ? null : Math.round(r * 100), '%', '30-day rate'));
 
     // Heatmap
     const heat = $('#dHeat');
     heat.style.setProperty('--c', h.color);
     heat.replaceChildren();
+    heat.classList.toggle('animate', anim);
     const t = startOfToday();
     const weeks = 20;
     const start = addDays(mondayOf(t), -(weeks - 1) * 7);
@@ -1122,6 +1209,7 @@
       const cls = { on: h.kind === 'quit' ? 'on' : 'on', partial: 'partial', skip: 'skip', slip: 'slip', rest: 'rest', future: 'future', before: 'before', miss: 'miss', none: '' }[s];
       heat.append(el('button', {
         class: `${cls}${dk === todayKey() ? ' is-today' : ''}${dk === k ? ' is-sel' : ''}`, disabled: s === 'future' || s === 'before',
+        '--d': `${150 + Math.floor(i / 7) * 22 + (i % 7) * 6}ms`,
         title: `${fmtShort(day)} · ${s === 'on' ? (h.kind === 'quit' ? 'clean' : 'done') : s}${noteOf(h, dk) ? ' · 📝' : ''}`,
         'aria-label': `${fmtLong(day)}: ${s}`,
         onclick: () => {
@@ -1457,7 +1545,7 @@
     $('#view-today').hidden = v !== 'today';
     $('#view-stats').hidden = v !== 'stats';
     $('#addBtn').hidden = v !== 'today';
-    render();
+    render({ animate: true });
     scrollTo({ top: 0 });
   }
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchView(t.dataset.view)));
@@ -1489,7 +1577,7 @@
   }, 30_000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); checkReminders(); } });
 
-  render();
+  render({ animate: true });
   if (state.timer) startTicker();
   scheduleBadgeCheck();
   setTimeout(checkReminders, 1500);

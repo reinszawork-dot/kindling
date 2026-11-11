@@ -1,6 +1,12 @@
 /* Kindling service worker: offline app shell + reminder notification clicks. */
-const VERSION = 'kindling-v3';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icon.svg'];
+const VERSION = 'kindling-v4';
+const SHELL = [
+  './', 'index.html', 'styles.css', 'manifest.webmanifest', 'icon.svg',
+  'js/app.js', 'js/util.js', 'js/data.js', 'js/store.js', 'js/stats.js', 'js/charts.js', 'js/ui.js', 'js/actions.js',
+  'js/reminders.js', 'js/editor.js', 'js/habitrow.js', 'js/shell.js',
+  'js/views/dashboard.js', 'js/views/habits.js', 'js/views/habit.js', 'js/views/analytics.js',
+  'js/views/calendar.js', 'js/views/goals.js', 'js/views/achievements.js', 'js/views/settings.js',
+];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (e) => {

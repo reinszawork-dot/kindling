@@ -6,6 +6,7 @@ import { ring } from '../charts.js';
 import { pageHead, card, emptyState, menu, confirmDialog, toast, segmented, confetti } from '../ui.js';
 import { openGoalEditor } from '../editor.js';
 import { scheduleChecks } from '../actions.js';
+import { challengesCard } from '../pro.js';
 
 let tab = 'active';
 
@@ -72,6 +73,7 @@ export const goalsView = {
       state.goals.length ? el('div', { class: 'toolbar' }, segmented([
         { value: 'active', label: `Active ${counts.active}` }, { value: 'done', label: `Completed ${counts.done}` }, { value: 'archived', label: `Archived ${counts.archived}` },
       ], tab, (v) => { tab = v; root.replaceChildren(); this.mount(root, { animate: true }); }, 'Filter goals')) : null,
-      host].filter(Boolean));
+      host,
+      challengesCard()].filter(Boolean));
   },
 };

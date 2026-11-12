@@ -14,6 +14,7 @@ import { calendarView } from './views/calendar.js';
 import { goalsView } from './views/goals.js';
 import { achievementsView } from './views/achievements.js';
 import { settingsView } from './views/settings.js';
+import { applyAccent } from './pro.js';
 
 const ROUTES = {
   '': dashboard, habits: habitsView, habit: habitView, analytics: analyticsView, calendar: calendarView,
@@ -50,6 +51,7 @@ const navActive = (id, name) => id === name || (id === 'habits' && name === 'hab
 function applyTheme() {
   const t = state.settings.theme;
   if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  applyAccent();
   const dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#191817' : '#F8F5F0');
 }

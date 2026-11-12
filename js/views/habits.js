@@ -5,6 +5,7 @@ import { streakInfo, rate, scheduleText, weeklyRates, strength } from '../stats.
 import { sparkline } from '../charts.js';
 import { pageHead, card, emptyState, menu, confirmDialog, toast, catChip, habitIcon, segmented } from '../ui.js';
 import { openHabitEditor } from '../editor.js';
+import { gate, openPacks, proBadge } from '../pro.js';
 
 let filter = 'active';
 let query = '';
@@ -90,6 +91,7 @@ export const habitsView = {
     const usedCats = allCategories().filter((c) => all.some((h) => h.category === c.id));
     root.append(...[
       pageHead('My Habits', `${plural(counts.active, 'active habit')}${counts.paused ? ` · ${counts.paused} paused` : ''}`,
+        el('button', { type: 'button', class: 'btn', onclick: () => gate('Habit packs', openPacks) }, icon('sparkle', 16), 'Habit packs', proBadge()),
         el('button', { type: 'button', class: 'btn primary', onclick: () => openHabitEditor() }, icon('plus', 16), 'New habit')),
       el('div', { class: 'toolbar' },
         segmented([

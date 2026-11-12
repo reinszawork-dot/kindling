@@ -5,6 +5,7 @@ import { rangeFor, rangeStats, shiftRange, categoryBreakdown, habitPerformance, 
 import { barChart, lineChart, hbars, donut, heatmap, responsive, tipTitle, tipRow } from '../charts.js';
 import { pageHead, card, cardHead, segmented, emptyState, statTile } from '../ui.js';
 import { openHabitEditor } from '../editor.js';
+import { gate, openLifetime, proBadge } from '../pro.js';
 
 const view = { type: 'week', offset: 0, habit: null };
 
@@ -113,7 +114,10 @@ export const analyticsView = {
         card({ class: 'chart-card' }, cardHead('By category'), donutHost)),
       card({ class: 'chart-card' }, cardHead('Activity', el('span', { class: 'muted small' }, 'habits completed per day, last 12 months')), heatHost,
         el('div', { class: 'legend' }, el('span', {}, 'Less'), ['l0', 'l1', 'l2', 'l3', 'l4'].map((c) => el('i', { class: c })), el('span', {}, 'More'))),
-      card({ class: 'chart-card' }, cardHead('Week by week', el('span', { class: 'muted small' }, 'this week vs the 7 before it')), weeksHost, weeksFacts));
+      card({ class: 'chart-card' }, cardHead('Week by week', el('span', { class: 'muted small' }, 'this week vs the 7 before it')), weeksHost, weeksFacts),
+      card({ class: 'lifetime-card' }, cardHead('Lifetime report', proBadge()),
+        el('p', { class: 'muted small' }, 'Every month since your first habit, your completion by year and your longest runs ever, in one place.'),
+        el('div', { class: 'btn-row' }, el('button', { type: 'button', class: 'btn', onclick: () => gate('The lifetime report', openLifetime) }, icon('chart', 15), 'Open lifetime report'))));
 
     // Each chart is mounted once; filters swap the draw function and redraw in place.
     const draws = {};

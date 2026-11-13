@@ -10,6 +10,8 @@ import { gate, openPacks, proBadge } from '../pro.js';
 let filter = 'active';
 let query = '';
 let cat = 'all';
+// A new habit is always active, so show the Active list (it may be hidden behind Paused/Archived or a search).
+addEventListener('kindling-habit-added', () => { filter = 'active'; cat = 'all'; query = ''; });
 
 export async function deleteWithUndo(h, after) {
   const ok = await confirmDialog(`Delete “${h.name}”?`, 'This removes the habit and its whole history, notes and timer records. Archive it instead if you might want it back.', 'Delete habit');

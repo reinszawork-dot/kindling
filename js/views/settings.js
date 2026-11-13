@@ -6,7 +6,7 @@ import { dayStatus, countOf, noteOf, unitOf, isWeekly } from '../stats.js';
 import { pageHead, card, cardHead, segmented, toast, confirmDialog } from '../ui.js';
 import { avatarEl } from '../shell.js';
 import { icsFor, notify } from '../reminders.js';
-import { ACCENTS, gate, isPro, openPro, proBadge } from '../pro.js';
+import { ACCENTS, gate, isPro, proBadge } from '../pro.js';
 
 let installEvt = null;
 addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
@@ -105,10 +105,6 @@ export const settingsView = {
         row(el('span', {}, 'Accent colour', proBadge()), 'Colours buttons, rings and charts across the app.', el('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent colour' },
           ACCENTS.map((a) => el('button', { type: 'button', style: { '--sw': a.sw }, title: a.name, 'aria-label': a.name, 'aria-pressed': String((isPro() ? s.accent || '' : '') === a.id),
             onclick: () => (a.id ? gate('Accent colours', () => setSetting('accent', a.id)) : setSetting('accent', '')) }))))),
-      card({ class: 'pro-card' }, cardHead('NextWave Pro'),
-        row(isPro() ? 'Kindling Pro is unlocked' : 'Kindling Pro · R69 once-off',
-          isPro() ? 'Thank you for supporting NextWave Digital. Manage your licence key here.' : 'Habit packs, challenges, accent colours and the lifetime report. Everything free stays free.',
-          el('button', { type: 'button', class: `btn sm${isPro() ? ' ghost' : ' primary'}`, onclick: openPro }, isPro() ? 'Manage' : 'Get Pro'))),
       card({}, cardHead('Reminders & notifications'),
         row('Reminders', 'Show reminders for habits that have reminder times.', el('label', { class: 'switch' },
           el('input', { type: 'checkbox', checked: s.notifications, onchange: (e) => setSetting('notifications', e.target.checked) }), el('span', { class: 'switch-ui', 'aria-hidden': 'true' }))),

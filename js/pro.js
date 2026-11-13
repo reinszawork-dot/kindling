@@ -1,17 +1,11 @@
-/* Kindling Pro: habit packs, challenges, accent colours and the lifetime report.
-   Unlocking is handled by nextwave-pro.js (window.NextWavePro), loaded before the app. */
+/* Kindling Pro: habit packs, challenges, accent colours and the lifetime report. Free for everyone. */
 import { state, save, active, byId, addHabit } from './store.js';
 import { el, icon, keyOf, parseKey, addDays, startOfToday, todayKey, fmtDate, fmtNum, pct, plural, uid } from './util.js';
 import { dayStatus, isDue, streakInfo, rangeStats, isWeekly } from './stats.js';
 import { openModal, card, cardHead, toast, confetti, habitIcon } from './ui.js';
 
-const NWP = window.NextWavePro;
-NWP.init({
-  app: 'kindling', name: 'Kindling Pro', price: 'R69 once-off',
-  buyUrl: 'https://payhip.com', // placeholder until the Payhip product exists
-  features: ['Habit packs: add a whole routine in one tap', '21, 30 and 66-day challenges', '6 extra accent colours', 'Lifetime report: every month since you started'],
-  accent: '#C46B4E',
-});
+// No payments: everything is unlocked. Same calls as before so the rest of the app is unchanged.
+const NWP = { isPro: () => true, gate: (_name, fn) => fn && fn(), open() {} };
 export const isPro = () => NWP.isPro();
 export const gate = (name, fn) => NWP.gate(name, fn);
 export const openPro = () => NWP.open();

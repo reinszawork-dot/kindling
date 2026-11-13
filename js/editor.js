@@ -156,7 +156,7 @@ export function openHabitEditor(id = null, preset = null) {
     draft.reminders = [...new Set(draft.reminders.filter(Boolean))].sort();
     let h;
     if (existing) { h = updateHabit(existing.id, draft); toast('Habit saved'); }
-    else { h = addHabit(draft); toast(`${h.emoji} ${h.name} added`); }
+    else { dispatchEvent(new CustomEvent('kindling-habit-added')); h = addHabit(draft); toast(`${h.emoji} ${h.name} added`); } // event first: the save redraws the list
     armReminders(h);
     if (h.reminders.length && state.settings.notifications && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
     close();
